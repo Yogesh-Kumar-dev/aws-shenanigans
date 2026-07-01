@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local environment
+.env
+
+# Serverless
+.serverless/
+.requirements/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+node_modules

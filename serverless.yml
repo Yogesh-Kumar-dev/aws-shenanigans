@@ -1,0 +1,68 @@
+service: aws-automation
+frameworkVersion: "4"
+useDotenv: true
+
+configValidationMode: error
+
+custom:
+  stage: ${opt:stage, env:STAGE, 'dev'}
+  region: ${opt:region, env:AWS_REGION, 'ap-south-2'}
+  pythonRequirements:
+    dockerizePip: false
+    slim: true
+    strip: false
+    useStaticCache: true
+    useDownloadCache: true
+
+provider:
+  name: aws
+  runtime: python3.12
+  architecture: arm64
+  stage: ${self:custom.stage}
+  region: ${self:custom.region}
+  memorySize: 128
+  timeout: 30
+  logRetentionInDays: 30
+  versionFunctions: false
+  deploymentMethod: direct
+  deploymentPrefix: serverless
+  environment:
+    STAGE: ${self:custom.stage}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'INFO'}
+    TELEGRAM_BOT_TOKEN: ${env:TELEGRAM_BOT_TOKEN, ''}
+    TELEGRAM_CHAT_ID: ${env:TELEGRAM_CHAT_ID, ''}
+    FREE_TIER_ALERT_LIMIT_PERCENT: ${env:FREE_TIER_ALERT_LIMIT_PERCENT, '10'}
+    FREE_TIER_REPORT_MAX_ITEMS: ${env:FREE_TIER_REPORT_MAX_ITEMS, '10'}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogStream
+            - logs:CreateLogGroup
+            - logs:PutLogEvents
+          Resource:
+            - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${self:service}-${self:custom.stage}-*:*
+        - Effect: Allow
+          Action:
+            - freetier:GetFreeTierUsage
+          Resource: "*"
+
+package:
+  individually: true
+  patterns:
+    - "!**"
+
+functions:
+  budget-alert:
+    handler: functions/budget_alert/handler.handle
+    description: Sends a daily AWS Free Tier usage report to Telegram.
+    package:
+      patterns:
+        - functions/budget_alert/**
+    events:
+      - schedule:
+          name: ${self:service}-${self:custom.stage}-budget-alert-daily
+          description: Daily AWS Free Tier usage Telegram report at 8:00 AM IST.
+          rate: cron(30 2 * * ? *)
+          enabled: true
