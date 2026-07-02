@@ -32,14 +32,15 @@ resolved independently. For each value:
 
 1. **AWS SSM Parameter Store** – the parameter named by `TELEGRAM_BOT_TOKEN_PARAM`
    / `TELEGRAM_CHAT_ID_PARAM` (defaulting to
-   `/<service>/<stage>/telegram/bot-token` and `.../chat-id`). Store the token as
-   a `SecureString` (it is fetched with decryption) and the chat id as a plain
+   `/automation/<stage>/telegram/bot-token` and `.../chat-id`). The prefix must
+   not start with `aws`/`ssm`, which SSM reserves. Store the token as a
+   `SecureString` (it is fetched with decryption) and the chat id as a plain
    `String`:
 
    ```powershell
-   aws ssm put-parameter --name /aws-automation/dev/telegram/bot-token `
+   aws ssm put-parameter --name /automation/dev/telegram/bot-token `
      --type SecureString --value "123456789:AA..."
-   aws ssm put-parameter --name /aws-automation/dev/telegram/chat-id `
+   aws ssm put-parameter --name /automation/dev/telegram/chat-id `
      --type String --value "123456789"
    ```
 
@@ -54,7 +55,7 @@ resolved independently. For each value:
 `serverless invoke local` reads the same parameters as the deployed Lambda, so
 local runs need AWS credentials that can call `ssm:GetParameter` (unless you
 rely purely on the env-var fallback). The Lambda's IAM role only grants
-`ssm:GetParameter` on `/<service>/<stage>/telegram/bot-token` and `.../chat-id`
+`ssm:GetParameter` on `/automation/<stage>/telegram/bot-token` and `.../chat-id`
 (plus `kms:Decrypt` via the SSM service for the `SecureString` token).
 
 ## Other environment variables

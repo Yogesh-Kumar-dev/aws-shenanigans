@@ -7,6 +7,7 @@ configValidationMode: error
 custom:
   stage: ${opt:stage, env:STAGE, 'dev'}
   region: ${opt:region, env:AWS_REGION, 'ap-south-2'}
+  telegramParamPrefix: ${env:TELEGRAM_PARAM_PREFIX, '/automation/${self:custom.stage}/telegram'}
   pythonRequirements:
     dockerizePip: false
     slim: true
@@ -29,8 +30,8 @@ provider:
   environment:
     STAGE: ${self:custom.stage}
     LOG_LEVEL: ${env:LOG_LEVEL, 'INFO'}
-    TELEGRAM_BOT_TOKEN_PARAM: ${env:TELEGRAM_BOT_TOKEN_PARAM, '/${self:service}/${self:custom.stage}/telegram/bot-token'}
-    TELEGRAM_CHAT_ID_PARAM: ${env:TELEGRAM_CHAT_ID_PARAM, '/${self:service}/${self:custom.stage}/telegram/chat-id'}
+    TELEGRAM_BOT_TOKEN_PARAM: ${env:TELEGRAM_BOT_TOKEN_PARAM, '${self:custom.telegramParamPrefix}/bot-token'}
+    TELEGRAM_CHAT_ID_PARAM: ${env:TELEGRAM_CHAT_ID_PARAM, '${self:custom.telegramParamPrefix}/chat-id'}
     TELEGRAM_BOT_TOKEN: ${env:TELEGRAM_BOT_TOKEN, ''}
     TELEGRAM_CHAT_ID: ${env:TELEGRAM_CHAT_ID, ''}
     FREE_TIER_WARN_PERCENT: ${env:FREE_TIER_WARN_PERCENT, '10'}
@@ -53,8 +54,8 @@ provider:
           Action:
             - ssm:GetParameter
           Resource:
-            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${self:service}/${self:custom.stage}/telegram/bot-token
-            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${self:service}/${self:custom.stage}/telegram/chat-id
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${self:custom.telegramParamPrefix}/bot-token
+            - !Sub arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter${self:custom.telegramParamPrefix}/chat-id
         # Allow decrypting SecureString parameters via the SSM-managed KMS key only.
         - Effect: Allow
           Action:
