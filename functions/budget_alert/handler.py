@@ -10,6 +10,7 @@ import urllib.request
 from datetime import datetime
 
 import boto3
+from botocore.exceptions import BotoCoreError, ClientError
 
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
@@ -17,23 +18,76 @@ logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 def handle(event, context):
     """Lambda entry point. AWS calls this once per schedule."""
-    bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    if not bot_token or not chat_id:
-        raise ValueError("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set")
-
-    alert_limit_percent = float(os.getenv("FREE_TIER_ALERT_LIMIT_PERCENT", "10"))
-    max_items = int(os.getenv("FREE_TIER_REPORT_MAX_ITEMS", "10"))
     region = os.getenv("AWS_REGION", "us-east-1")
 
+    bot_token, chat_id = get_telegram_credentials(region)
+    if not bot_token or not chat_id:
+        raise ValueError(
+            "Telegram bot token and chat id must be set "
+            "(via SSM Parameter Store or environment variables)"
+        )
+
+    warn_percent = float(os.getenv("FREE_TIER_WARN_PERCENT", "10"))
+    max_items = int(os.getenv("FREE_TIER_REPORT_MAX_ITEMS", "3"))
+
     usages = get_free_tier_usages(region)
-    message = build_report(usages, alert_limit_percent, max_items)
+    message = build_report(usages, warn_percent, max_items)
     send_telegram_message(bot_token, chat_id, message)
 
-    alert_count = len(alert_items(usages, alert_limit_percent))
+    alert_count = len(alert_items(usages, warn_percent))
     logger.info("Sent report: %s items, %s alerts", len(usages), alert_count)
     return {"usage_count": len(usages), "alert_count": alert_count}
 
+
+def get_telegram_credentials(region):
+    """Resolve Telegram credentials from SSM Parameter Store.
+
+    Looks up the parameters specified by TELEGRAM_BOT_TOKEN_PARAM and
+    TELEGRAM_CHAT_ID_PARAM. If either parameter is unavailable, falls back
+    to the corresponding environment variable.
+    """
+    bot_token = get_parameter(
+        os.getenv("TELEGRAM_BOT_TOKEN_PARAM"),
+        region,
+        decrypt=True,
+    ) or os.getenv("TELEGRAM_BOT_TOKEN")
+
+    chat_id = get_parameter(
+        os.getenv("TELEGRAM_CHAT_ID_PARAM"),
+        region,
+    ) or os.getenv("TELEGRAM_CHAT_ID")
+
+    return bot_token, chat_id
+
+
+def get_parameter(param_name, region, decrypt=False):
+    """Fetch a single SSM parameter.
+
+    Returns the parameter value or None if it cannot be retrieved.
+    """
+    if not param_name:
+        return None
+
+    try:
+        client = boto3.client("ssm", region_name=region)
+        response = client.get_parameter(
+            Name=param_name,
+            WithDecryption=decrypt,
+        )
+        return response["Parameter"]["Value"]
+
+    except ClientError as exc:
+        # AWS answered but rejected the request (missing param, denied, etc.).
+        logger.warning(
+            "Could not read parameter %s (%s)",
+            param_name,
+            exc.response.get("Error", {}).get("Code", "unknown"),
+        )
+        return None
+    except BotoCoreError as exc:
+        # Never reached AWS: no credentials, no region, network failure, etc.
+        logger.warning("Could not read parameter %s (%s)", param_name, exc)
+        return None
 
 def get_free_tier_usages(region):
     """Call the AWS Free Tier API and return a list of usage dicts."""
@@ -69,14 +123,14 @@ def percent(value, limit):
     return round((value / limit) * 100, 2)
 
 
-def alert_items(usages, alert_limit_percent):
-    """Usages at or above the alert threshold (actual or forecast)."""
-    flagged = []
-    for usage in usages:
-        highest_pct = max(usage["actual_pct"], usage["forecast_pct"])
-        if highest_pct >= alert_limit_percent:
-            flagged.append(usage)
-    return flagged
+def highest_pct(usage):
+    """The worst of actual and forecast usage, so hot services surface."""
+    return max(usage["actual_pct"], usage["forecast_pct"])
+
+
+def alert_items(usages, warn_percent):
+    """Usages at or above the warning threshold (actual or forecast)."""
+    return [u for u in usages if highest_pct(u) >= warn_percent]
 
 
 def fmt_num(value):
@@ -86,55 +140,68 @@ def fmt_num(value):
     return f"{round(value, 2):,}"
 
 
-def status_dot(pct, alert_limit_percent):
+DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━"
+
+
+def status_dot(pct, warn_percent):
     """Pick a colored dot so hot services stand out at a glance."""
     if pct >= 100:
         return "🔴"  # over the free tier limit — this now costs money
-    if pct >= alert_limit_percent:
-        return "🟡"  # past your alert threshold
+    if pct >= warn_percent:
+        return "🟡"  # approaching the limit
     return "🟢"
 
 
-def format_line(usage, alert_limit_percent):
-    """Format one usage item as two readable lines with a status dot."""
-    dot = status_dot(max(usage["actual_pct"], usage["forecast_pct"]), alert_limit_percent)
+def format_line(usage, warn_percent):
+    """Format one usage item as two lines: dot + name, then usage detail."""
+    pct = highest_pct(usage)
+    dot = status_dot(pct, warn_percent)
     service = html.escape(usage["service"])
-    unit = html.escape(usage["unit"])
     return (
-        f"{dot} <b>{service}</b> · {unit}\n"
-        f"    {usage['actual_pct']:g}% used · {usage['forecast_pct']:g}% forecast "
-        f"({fmt_num(usage['actual'])}/{fmt_num(usage['limit'])})"
+        f"{dot} <b>{service}</b>\n"
+        f"   {pct:g}% ({fmt_num(usage['actual'])} / {fmt_num(usage['limit'])})"
     )
 
 
-def build_report(usages, alert_limit_percent, max_items):
+def build_report(usages, warn_percent, max_items):
     """Build the Telegram message text (HTML) from the usage list."""
     today = datetime.now().strftime("%d %b %Y")
-    title = f"📊 <b>AWS Free Tier — Daily Report</b>\n<i>{today}</i>"
+    title = f"📊 <b>AWS Free Tier Report</b>\n🗓️ {today}"
 
     if not usages:
-        return f"{title}\n\nNo Free Tier usage returned for this account."
+        return f"{title}\n\n{DIVIDER}\n\nNo Free Tier usage returned for this account."
 
-    flagged = alert_items(usages, alert_limit_percent)
-    top = sorted(
-        usages,
-        key=lambda u: max(u["actual_pct"], u["forecast_pct"]),
-        reverse=True,
-    )[:max_items]
+    critical = [u for u in usages if highest_pct(u) >= 100]
+    warning = [u for u in usages if warn_percent <= highest_pct(u) < 100]
+    healthy = len(usages) - len(critical) - len(warning)
+
+    top = sorted(usages, key=highest_pct, reverse=True)[:max_items]
 
     lines = [
         title,
         "",
-        f"Tracked items: <b>{len(usages)}</b>  ·  "
-        f"Above {alert_limit_percent:g}%: <b>{len(flagged)}</b>",
+        DIVIDER,
         "",
-        "🔝 <b>Top usage</b>",
+        f"🟢 Healthy: {healthy}/{len(usages)} services",
+        f"🟡 Warning (>{warn_percent:g}%): {len(warning)}",
+        "🔴 Critical (>100%): " + str(len(critical)),
+        "",
+        DIVIDER,
+        "",
+        "🏆 <b>Highest Usage</b>",
+        "",
     ]
-    lines.extend(format_line(u, alert_limit_percent) for u in top)
+    lines.append("\n\n".join(format_line(u, warn_percent) for u in top))
+    lines.extend(["", DIVIDER, ""])
 
-    if flagged:
-        lines.extend(["", "⚠️ <b>Needs attention</b>"])
-        lines.extend(format_line(u, alert_limit_percent) for u in flagged)
+    if critical:
+        lines.append(
+            f"🔴 <b>Action needed</b> — {len(critical)} service(s) over the free tier limit."
+        )
+    elif warning:
+        lines.append(f"🟡 {len(warning)} service(s) approaching the limit.")
+    else:
+        lines.append("✅ Everything looks good today.")
 
     return "\n".join(lines)
 

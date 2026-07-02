@@ -17,25 +17,57 @@ Everything lives in one file: `handler.py`.
 The functions in `handler.py`:
 
 - `handle` – Lambda entry point (AWS always passes `event` and `context`).
+- `get_telegram_credentials` / `get_parameter` – resolve the bot token and chat
+  id from SSM Parameter Store, falling back to env vars.
 - `get_free_tier_usages` – calls AWS and returns a list of usage dicts.
 - `build_report` – turns the usage list into the Telegram message text.
 - `alert_items` / `percent` / `format_line` – small helpers.
 - `send_telegram_message` – posts the message using `urllib` (no `requests`
   dependency, so the package stays small).
 
-## Environment variables
+## Credentials
+
+The bot token and chat id are each stored as their own SSM parameter and
+resolved independently. For each value:
+
+1. **AWS SSM Parameter Store** – the parameter named by `TELEGRAM_BOT_TOKEN_PARAM`
+   / `TELEGRAM_CHAT_ID_PARAM` (defaulting to
+   `/<service>/<stage>/telegram/bot-token` and `.../chat-id`). Store the token as
+   a `SecureString` (it is fetched with decryption) and the chat id as a plain
+   `String`:
+
+   ```powershell
+   aws ssm put-parameter --name /aws-automation/dev/telegram/bot-token `
+     --type SecureString --value "123456789:AA..."
+   aws ssm put-parameter --name /aws-automation/dev/telegram/chat-id `
+     --type String --value "123456789"
+   ```
+
+   Standard-tier parameters are free, and `SecureString` with the AWS-managed
+   `alias/aws/ssm` key has no monthly key charge.
+
+2. **Environment variables** – if a parameter is missing, inaccessible, or its
+   env var name is unset, that value falls back to `TELEGRAM_BOT_TOKEN` /
+   `TELEGRAM_CHAT_ID`. The fallback is per-value, so you can source one from SSM
+   and the other from the environment.
+
+`serverless invoke local` reads the same parameters as the deployed Lambda, so
+local runs need AWS credentials that can call `ssm:GetParameter` (unless you
+rely purely on the env-var fallback). The Lambda's IAM role only grants
+`ssm:GetParameter` on `/<service>/<stage>/telegram/bot-token` and `.../chat-id`
+(plus `kms:Decrypt` via the SSM service for the `SecureString` token).
+
+## Other environment variables
 
 ```text
-TELEGRAM_BOT_TOKEN              (required)
-TELEGRAM_CHAT_ID               (required)
-FREE_TIER_ALERT_LIMIT_PERCENT  (default 10)
-FREE_TIER_REPORT_MAX_ITEMS     (default 10)
+FREE_TIER_WARN_PERCENT      (default 10)
+FREE_TIER_REPORT_MAX_ITEMS  (default 3)
 ```
 
-- `FREE_TIER_ALERT_LIMIT_PERCENT` controls the "Needs attention" section. With
-  `10`, any item using or forecasted to use at least 10% of its limit is flagged.
-- `FREE_TIER_REPORT_MAX_ITEMS` caps the "Top usage" section only. The
-  "Needs attention" section always shows every flagged item.
+- `FREE_TIER_WARN_PERCENT` is the "Warning" threshold in the summary. With `10`,
+  any item using or forecasted to use at least 10% of its limit is counted as a
+  warning; at 100% or above it is counted as critical.
+- `FREE_TIER_REPORT_MAX_ITEMS` caps the "Highest Usage" section (default 3).
 
 ## Local invocation
 
