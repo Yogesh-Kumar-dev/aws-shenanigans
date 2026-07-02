@@ -5,6 +5,10 @@ useDotenv: true
 configValidationMode: error
 
 custom:
+  # Keep only the last 2 published Lambda versions; prune older ones after each deploy.
+  prune:
+    automatic: true
+    number: 2
   stage: ${opt:stage, env:STAGE, 'dev'}
   region: ${opt:region, env:AWS_REGION, 'ap-south-2'}
   telegramParamPrefix: ${env:TELEGRAM_PARAM_PREFIX, '/automation/${self:custom.stage}/telegram'}
@@ -24,7 +28,7 @@ provider:
   memorySize: 128
   timeout: 30
   logRetentionInDays: 30
-  versionFunctions: false
+  versionFunctions: true
   deploymentMethod: direct
   deploymentPrefix: serverless
   environment:
