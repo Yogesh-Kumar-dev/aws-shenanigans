@@ -99,6 +99,29 @@ functions:
       - httpApi:
           method: DELETE
           path: /tasks/{id}
+  # v2 — a single Lambda that handles every task route, switching on the HTTP
+  # method internally (the "fat function" pattern). Contrast with the five
+  # single-purpose functions above.
+  tasks-v2:
+    handler: functions/tasks-v2/handler.handle
+    description: All task CRUD in one Lambda, routed by method (v2).
+    events:
+      - httpApi:
+          method: POST
+          path: /v2/tasks
+      - httpApi:
+          method: GET
+          path: /v2/tasks
+      - httpApi:
+          method: GET
+          path: /v2/tasks/{id}
+      - httpApi:
+          method: PUT
+          path: /v2/tasks/{id}
+      - httpApi:
+          method: DELETE
+          path: /v2/tasks/{id}
+
   openapi:
     handler: functions/docs/openapi.handle
     description: Serve the OpenAPI spec (GET /openapi.json).

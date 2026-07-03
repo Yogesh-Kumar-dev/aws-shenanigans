@@ -12,15 +12,36 @@ Deploy it, open `/docs`, and drive every endpoint from the browser with Swagger'
 
 ## Endpoints
 
+The CRUD operations are exposed under **two prefixes** that behave identically
+but demonstrate two Lambda architectures (see [Two versions](#two-versions)):
+
+| Method | v1 path (one Lambda/route) | v2 path (single Lambda) | Description                    |
+| ------ | -------------------------- | ----------------------- | ------------------------------ |
+| POST   | `/tasks`                   | `/v2/tasks`             | Create a task.                 |
+| GET    | `/tasks`                   | `/v2/tasks`             | List tasks (filters below).    |
+| GET    | `/tasks/{id}`              | `/v2/tasks/{id}`        | Get a task by id.              |
+| PUT    | `/tasks/{id}`              | `/v2/tasks/{id}`        | Update writable fields.        |
+| DELETE | `/tasks/{id}`              | `/v2/tasks/{id}`        | Delete a task.                 |
+
+Plus the docs routes:
+
 | Method | Path             | Description                          |
 | ------ | ---------------- | ------------------------------------ |
-| POST   | `/tasks`         | Create a task.                       |
-| GET    | `/tasks`         | List tasks (with filters, see below).|
-| GET    | `/tasks/{id}`    | Get a task by id.                    |
-| PUT    | `/tasks/{id}`    | Update writable fields of a task.    |
-| DELETE | `/tasks/{id}`    | Delete a task.                       |
-| GET    | `/openapi.json`  | The OpenAPI 3.0 spec.                |
+| GET    | `/openapi.json`  | The OpenAPI 3.0 spec (both versions).|
 | GET    | `/docs`          | Swagger UI (interactive docs).       |
+
+## Two versions
+
+Both versions call the same core operations in [`lib/tasks.js`](lib/tasks.js), so
+their behavior is identical. Only the deployment shape differs:
+
+- **v1 — one Lambda per route** ([`functions/tasks/`](functions/tasks)). Five
+  single-purpose functions (`create-task`, `list-tasks`, ...). Fine-grained IAM,
+  metrics, and logs per route; a bad deploy only affects one route.
+- **v2 — one Lambda for everything** ([`functions/tasks-v2/handler.js`](functions/tasks-v2/handler.js)).
+  A single function wired to all `/v2/tasks*` routes that `switch`es on the HTTP
+  method. Fewer moving parts and one warm container for every route, but coarser
+  IAM/metrics/logs and a larger blast radius.
 
 ### List filters
 
@@ -74,9 +95,11 @@ apps/node/
 |-- lib/
 |   |-- db.js                 # shared DynamoDB Document client
 |   |-- http.js               # json()/parseBody()/handler() + HttpError
+|   |-- tasks.js              # core CRUD ops, shared by v1 and v2
 |   `-- openapi.js            # the OpenAPI spec (paths, filters, schemas)
 `-- functions/
-    |-- tasks/                # create/list/get/update/delete handlers
+    |-- tasks/                # v1: create/list/get/update/delete (one Lambda each)
+    |-- tasks-v2/             # v2: single Lambda routing on HTTP method
     `-- docs/                 # openapi.js (spec) + swagger.js (UI page)
 ```
 
