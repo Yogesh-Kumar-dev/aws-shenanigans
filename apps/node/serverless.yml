@@ -1,0 +1,118 @@
+service: crud-api
+frameworkVersion: "4"
+useDotenv: true
+
+configValidationMode: error
+
+custom:
+  # Keep only the last 2 published Lambda versions; prune older ones after each deploy.
+  prune:
+    automatic: true
+    number: 2
+  stage: ${opt:stage, env:STAGE, 'dev'}
+  region: ${opt:region, env:AWS_REGION, 'ap-south-2'}
+  tableName: ${self:service}-${self:custom.stage}-tasks
+
+provider:
+  name: aws
+  runtime: nodejs20.x
+  architecture: arm64
+  stage: ${self:custom.stage}
+  region: ${self:custom.region}
+  memorySize: 128
+  # HTTP API caps integration time at 30s; stay just under it.
+  timeout: 29
+  logRetentionInDays: 30
+  versionFunctions: true
+  deploymentMethod: direct
+  deploymentPrefix: serverless
+  httpApi:
+    cors: true
+  environment:
+    STAGE: ${self:custom.stage}
+    LOG_LEVEL: ${env:LOG_LEVEL, 'INFO'}
+    TASKS_TABLE: ${self:custom.tableName}
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogStream
+            - logs:CreateLogGroup
+            - logs:PutLogEvents
+          Resource:
+            - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${self:service}-${self:custom.stage}-*:*
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
+          Resource:
+            - !GetAtt TasksTable.Arn
+
+functions:
+  create-task:
+    handler: functions/tasks/create.handle
+    description: Create a task (POST /tasks).
+    events:
+      - httpApi:
+          method: POST
+          path: /tasks
+  list-tasks:
+    handler: functions/tasks/list.handle
+    description: List tasks with optional filters (GET /tasks).
+    events:
+      - httpApi:
+          method: GET
+          path: /tasks
+  get-task:
+    handler: functions/tasks/get.handle
+    description: Get a task by id (GET /tasks/{id}).
+    events:
+      - httpApi:
+          method: GET
+          path: /tasks/{id}
+  update-task:
+    handler: functions/tasks/update.handle
+    description: Update a task (PUT /tasks/{id}).
+    events:
+      - httpApi:
+          method: PUT
+          path: /tasks/{id}
+  delete-task:
+    handler: functions/tasks/delete.handle
+    description: Delete a task (DELETE /tasks/{id}).
+    events:
+      - httpApi:
+          method: DELETE
+          path: /tasks/{id}
+  openapi:
+    handler: functions/docs/openapi.handle
+    description: Serve the OpenAPI spec (GET /openapi.json).
+    events:
+      - httpApi:
+          method: GET
+          path: /openapi.json
+  docs:
+    handler: functions/docs/swagger.handle
+    description: Serve the Swagger UI page (GET /docs).
+    events:
+      - httpApi:
+          method: GET
+          path: /docs
+
+resources:
+  Resources:
+    TasksTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.tableName}
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH

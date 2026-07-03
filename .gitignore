@@ -24,3 +24,6 @@ Thumbs.db
 .idea/
 .vscode/
 node_modules
+
+# graphify knowledge graph output (regenerable)
+graphify-out/

@@ -1,169 +1,111 @@
-# AWS Automation
+# aws-shenanigans
 
-A small Serverless Framework project for learning AWS Lambda with Python. It
-currently has one Lambda, `budget-alert`, which sends a daily AWS Free Tier
-usage report to Telegram at 8:00 AM IST.
+A multi-runtime AWS Serverless playground. Each runtime is a self-contained
+Serverless Framework v4 service under `apps/`, deployed as its own independent
+CloudFormation stack.
 
-## Tech Stack
+| Service        | Runtime     | Path                         | What it does                                                        |
+| -------------- | ----------- | ---------------------------- | ------------------------------------------------------------------- |
+| `aws-automation` | Python 3.12 | [`apps/python`](apps/python) | `budget-alert`: daily AWS Free Tier usage report to Telegram.       |
+| `crud-api`       | Node.js 20  | [`apps/node`](apps/node)     | Tasks CRUD API (API Gateway + DynamoDB) with interactive Swagger UI at `/docs`. |
 
-- Serverless Framework v4
-- Python 3.12
-- AWS Lambda
-- Amazon EventBridge
-- AWS Free Tier API through boto3
-- pytest, Ruff, Black
+Each app has its own `serverless.yml`, dependencies, `.env.example`, and README.
+See each app's README for details:
 
-## Project Structure
+- [apps/python/functions/budget_alert/README.md](apps/python/functions/budget_alert/README.md)
+- [apps/node/README.md](apps/node/README.md)
+
+## Layout
 
 ```text
-aws-automation/
-|-- serverless.yml
-|-- package.json
-|-- pyproject.toml
-|-- requirements.txt
-|-- requirements-dev.txt
-|-- .env.example
-|-- .gitignore
-|-- README.md
-|-- functions/
-|   `-- budget_alert/
-|       |-- handler.py
-|       `-- README.md
-`-- tests/
+aws-shenanigans/
+|-- package.json              # workspace root + convenience deploy scripts
+|-- pnpm-workspace.yaml       # packages: apps/*
+|-- apps/
+|   |-- python/               # Python runtime (service: aws-automation)
+|   |   |-- serverless.yml
+|   |   |-- package.json
+|   |   |-- pyproject.toml
+|   |   |-- requirements*.txt
+|   |   |-- functions/budget_alert/
+|   |   `-- tests/
+|   `-- node/                 # Node.js runtime (service: crud-api)
+|       |-- serverless.yml
+|       |-- package.json
+|       |-- lib/              # shared db client, http helpers, OpenAPI spec
+|       |-- events/
+|       `-- functions/        # tasks/ (CRUD) + docs/ (Swagger UI + spec)
+`-- README.md
 ```
 
-Each Lambda lives in its own folder under `functions/` with its own README.
-See [functions/budget_alert/README.md](functions/budget_alert/README.md) for how
-`budget-alert` works, its function-specific environment variables, and how to run
-and test it.
+## Prerequisites
 
-## Setup
+- Node.js 20+ and [pnpm](https://pnpm.io/)
+- Python 3.12 (for the Python service)
+- AWS credentials configured for your target account/region
 
-Create and activate a virtual environment.
+## Install
 
-On Windows PowerShell:
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-```
-
-On macOS/Linux:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate
-```
-
-Install Python dependencies:
-
-```bash
-pip install -r requirements-dev.txt
-```
-
-Install the Serverless CLI:
+The repo is a pnpm workspace. Install the Serverless CLI and Node dependencies
+for every app from the root:
 
 ```bash
 pnpm install
 ```
 
-The Lambda runtime is Python. `package.json` only pins the Serverless CLI for
-reproducible local and CI deployments.
-
-## Environment Variables
-
-Copy the example file for local development:
+For the Python service, also set up a virtualenv and install its dev deps:
 
 ```bash
-cp .env.example .env
+cd apps/python
+python -m venv .venv
+# Windows PowerShell: .\.venv\Scripts\Activate.ps1
+# macOS/Linux:        source .venv/bin/activate
+pip install -r requirements-dev.txt
 ```
 
-Project-wide variables:
+## Deploy
 
-| Name | Description |
-| --- | --- |
-| `STAGE` | Deployment stage. Defaults to `dev`. |
-| `AWS_REGION` | AWS region. Defaults to `us-east-1`. |
-| `LOG_LEVEL` | Logging level. Defaults to `INFO`. |
-
-Each Lambda's own variables (for `budget-alert`, the Telegram and Free Tier
-settings) are documented in its function README.
-
-Do not commit `.env`. Configure production secrets through your CI/CD system or
-shell environment before deployment.
-
-Serverless is configured with `useDotenv: true`, so both `deploy` and
-`invoke local` load values from `.env` automatically.
-
-## IAM
-
-The Lambda has the minimum application permission it needs:
-
-```yaml
-- freetier:GetFreeTierUsage
-```
-
-CloudWatch Logs permissions are also included so Lambda can write logs.
-
-## Quality Checks
-
-Run Ruff:
+From the repo root, deploy either service independently:
 
 ```bash
-ruff check .
+pnpm run deploy:python     # deploys the aws-automation stack
+pnpm run deploy:node       # deploys the credit-api stack
+pnpm run deploy:all        # deploys both (recursively)
 ```
 
-Format with Black:
+Pass stage/region through to a single service by running from its directory:
 
 ```bash
-black .
-```
-
-Run tests:
-
-```bash
-pytest
-```
-
-## Deployment
-
-Deploy to the default `dev` stage:
-
-```bash
-npx serverless deploy
-```
-
-Deploy to a specific stage and region:
-
-```bash
-npx serverless deploy --stage prod --region us-east-1
+cd apps/node
+pnpm exec serverless deploy --stage prod --region us-east-1
 ```
 
 Remove a stack:
 
 ```bash
-npx serverless remove --stage dev --region us-east-1
+pnpm run remove:python
+pnpm run remove:node
 ```
 
-Functions are packaged individually to keep Lambda artifacts small.
+## Environment variables
 
-To run a Lambda locally, see its function README.
+Each app loads its own `.env` via `useDotenv: true`. Copy the example in each
+app directory:
 
-## Adding New Lambdas Later
+```bash
+cp apps/python/.env.example apps/python/.env
+cp apps/node/.env.example   apps/node/.env
+```
 
-1. Create a new folder under `functions/`, for example `functions/cost_report/`.
-2. Add a `handler.py` with a `handle(event, context)` function.
-3. Add the function to `serverless.yml` with the package patterns and events it needs.
-4. Add least-privilege IAM permissions for the AWS APIs the Lambda calls.
-5. Add tests under `tests/`.
+Never commit `.env`. Configure production secrets through your CI/CD system or
+shell environment (the Python service also reads secrets from SSM Parameter
+Store — see its README).
 
-Once a handler grows too large to read comfortably, split it into smaller files.
-Start simple.
+## Adding another service
 
-## Troubleshooting
-
-- Deploy fails on credentials: Confirm your AWS credentials and region are set.
-- Local packaging fails: Confirm your active Python version is 3.12 and run `pip install -r requirements-dev.txt`.
-- No useful logs: Check `/aws/lambda/aws-automation-<stage>-<function>` in CloudWatch Logs and set `LOG_LEVEL=DEBUG` for more detail.
-
-For issues specific to a Lambda, see its function README.
+1. Create a new folder under `apps/`, e.g. `apps/go/`.
+2. Add a `serverless.yml` with its own `service:` name (its own stack).
+3. Give it a `package.json` named `@aws-shenanigans/<name>` so it joins the
+   pnpm workspace, plus deploy/remove scripts.
+4. Add convenience `deploy:<name>` / `remove:<name>` scripts to the root
+   `package.json`.

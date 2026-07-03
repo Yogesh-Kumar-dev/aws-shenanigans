@@ -72,10 +72,10 @@ FREE_TIER_REPORT_MAX_ITEMS  (default 3)
 
 ## Local invocation
 
-From the project root:
+From the Python service directory (`apps/python`):
 
 ```powershell
-npx serverless invoke local --function budget-alert
+pnpm exec serverless invoke local --function budget-alert
 ```
 
 This runs the real handler, so it needs:

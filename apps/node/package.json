@@ -1,0 +1,23 @@
+{
+  "name": "@aws-shenanigans/node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Node.js-runtime tasks CRUD API (API Gateway + DynamoDB + Swagger UI)",
+  "type": "module",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "invoke:create": "serverless invoke local --function create-task --path events/create.json",
+    "invoke:list": "serverless invoke local --function list-tasks --path events/list.json",
+    "invoke:get": "serverless invoke local --function get-task --path events/get.json",
+    "invoke:update": "serverless invoke local --function update-task --path events/update.json",
+    "invoke:delete": "serverless invoke local --function delete-task --path events/delete.json"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.600.0",
+    "@aws-sdk/lib-dynamodb": "^3.600.0"
+  },
+  "devDependencies": {
+    "serverless": "^4.0.0"
+  }
+}

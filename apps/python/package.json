@@ -1,0 +1,14 @@
+{
+  "name": "@aws-shenanigans/python",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Python-runtime Lambdas (budget-alert)",
+  "scripts": {
+    "deploy": "serverless deploy",
+    "remove": "serverless remove",
+    "invoke:budget-alert": "serverless invoke local --function budget-alert"
+  },
+  "devDependencies": {
+    "serverless": "^4.0.0"
+  }
+}

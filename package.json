@@ -1,14 +1,13 @@
 {
-  "name": "aws-automation",
+  "name": "aws-shenanigans",
   "version": "0.1.0",
   "private": true,
-  "description": "Serverless AWS automation Lambdas",
+  "description": "A multi-runtime AWS Serverless playground (Python + Node.js)",
   "scripts": {
-    "deploy": "serverless deploy",
-    "remove": "serverless remove",
-    "invoke:budget-alert": "serverless invoke local --function budget-alert"
-  },
-  "devDependencies": {
-    "serverless": "^4.0.0"
+    "deploy:python": "pnpm --filter @aws-shenanigans/python deploy",
+    "deploy:node": "pnpm --filter @aws-shenanigans/node deploy",
+    "deploy:all": "pnpm -r deploy",
+    "remove:python": "pnpm --filter @aws-shenanigans/python remove",
+    "remove:node": "pnpm --filter @aws-shenanigans/node remove"
   }
 }
