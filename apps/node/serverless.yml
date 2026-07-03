@@ -4,6 +4,17 @@ useDotenv: true
 
 configValidationMode: error
 
+build:
+  esbuild:
+    bundle: true
+    minify: false
+    # Ship only the bundled handlers; do not package node_modules. @aws-sdk/* is
+    # left external and resolved from the Node 20 runtime's built-in AWS SDK v3.
+    # Without this, Serverless copies @aws-sdk from node_modules, which breaks
+    # under pnpm's non-flat layout (its @smithy/* deps go missing at runtime).
+    exclude:
+      - "@aws-sdk/*"
+
 custom:
   # Keep only the last 2 published Lambda versions; prune older ones after each deploy.
   prune:
