@@ -40,6 +40,7 @@ provider:
     TELEGRAM_CHAT_ID: ${env:TELEGRAM_CHAT_ID, ''}
     FREE_TIER_WARN_PERCENT: ${env:FREE_TIER_WARN_PERCENT, '10'}
     FREE_TIER_REPORT_MAX_ITEMS: ${env:FREE_TIER_REPORT_MAX_ITEMS, '3'}
+    EC2_DOMAIN: ${env:EC2_DOMAIN, 'quickrecall-aws.duckdns.org'}
   iam:
     role:
       statements:
@@ -68,6 +69,14 @@ provider:
           Condition:
             StringEquals:
               kms:ViaService: !Sub ssm.${AWS::Region}.amazonaws.com
+        # Instance ID is resolved at runtime from the Elastic IP, so it can't
+        # be scoped to a specific instance ARN at deploy time.
+        - Effect: Allow
+          Action:
+            - ec2:DescribeInstances
+            - ec2:StartInstances
+            - ec2:StopInstances
+          Resource: "*"
 
 package:
   individually: true
@@ -87,3 +96,25 @@ functions:
           description: Daily AWS Free Tier usage Telegram report at 8:00 AM IST.
           rate: cron(30 2 * * ? *)
           enabled: true
+
+  ec2-scheduler:
+    handler: functions/ec2_scheduler/handler.handle
+    description: Starts/stops the reserved EC2 instance on a daily schedule.
+    package:
+      patterns:
+        - functions/ec2_scheduler/**
+    events:
+      - schedule:
+          name: ${self:service}-${self:custom.stage}-ec2-start-daily
+          description: Start EC2 instance at 8:00 AM IST.
+          rate: cron(30 2 * * ? *)
+          enabled: true
+          input:
+            action: start
+      - schedule:
+          name: ${self:service}-${self:custom.stage}-ec2-stop-daily
+          description: Stop EC2 instance at 11:00 PM IST.
+          rate: cron(30 17 * * ? *)
+          enabled: true
+          input:
+            action: stop

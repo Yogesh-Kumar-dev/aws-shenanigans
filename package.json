@@ -4,10 +4,10 @@
   "private": true,
   "description": "A multi-runtime AWS Serverless playground (Python + Node.js)",
   "scripts": {
-    "deploy:python": "pnpm --filter @aws-shenanigans/python deploy",
-    "deploy:node": "pnpm --filter @aws-shenanigans/node deploy",
-    "deploy:all": "pnpm -r deploy",
-    "remove:python": "pnpm --filter @aws-shenanigans/python remove",
-    "remove:node": "pnpm --filter @aws-shenanigans/node remove"
+    "deploy:python": "pnpm --filter @aws-shenanigans/python run deploy",
+    "deploy:node": "pnpm --filter @aws-shenanigans/node run deploy",
+    "deploy:all": "pnpm -r run deploy",
+    "remove:python": "pnpm --filter @aws-shenanigans/python run remove",
+    "remove:node": "pnpm --filter @aws-shenanigans/node run remove"
   }
 }
