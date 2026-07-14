@@ -29,9 +29,11 @@ def handle(event, context):
 
     warn_percent = float(os.getenv("FREE_TIER_WARN_PERCENT", "10"))
     max_items = int(os.getenv("FREE_TIER_REPORT_MAX_ITEMS", "3"))
+    credit_warn_usd = float(os.getenv("FREE_TIER_CREDIT_WARN_USD", "50"))
 
     usages = get_free_tier_usages(region)
-    message = build_report(usages, warn_percent, max_items)
+    credit_balance = get_credit_balance(region)
+    message = build_report(usages, warn_percent, max_items, credit_balance, credit_warn_usd)
     send_telegram_message(bot_token, chat_id, message)
 
     alert_count = len(alert_items(usages, warn_percent))
@@ -113,7 +115,62 @@ def get_free_tier_usages(region):
                     "type": item.get("freeTierType", "Free Tier"),
                 }
             )
+
+    logger.info("Free Tier API returned %s line item(s)", len(usages))
+    for usage in usages:
+        logger.debug(
+            "usage item: service=%r unit=%r limit=%s type=%r",
+            usage["service"],
+            usage["unit"],
+            usage["limit"],
+            usage["type"],
+        )
+
+    ec2_like = [
+        u
+        for u in usages
+        if "ec2" in u["service"].lower() or "compute" in u["service"].lower()
+    ]
+    if ec2_like:
+        logger.info(
+            "EC2-like line items found: %s",
+            [(u["service"], u["unit"], u["limit"]) for u in ec2_like],
+        )
+    else:
+        logger.info(
+            "No EC2-like line items in Free Tier API response "
+            "(this is expected for non-t2.micro/t3.micro instance types, "
+            "or once your account's 12-month Free Tier window has expired)"
+        )
+
     return usages
+
+
+def get_credit_balance(region):
+    """Fetch the account's remaining Free Tier credit balance and expiration.
+
+    Newer AWS accounts run on the credit-based Free Tier plan ($200 total,
+    6-month expiry) instead of the legacy per-service 12-month/hours model, so
+    remaining credits (not EC2 hours) is what actually determines when this
+    account starts paying. Returns None if the account isn't on this plan.
+    """
+    client = boto3.client("freetier", region_name=region)
+    try:
+        response = client.get_account_plan_state()
+    except (ClientError, BotoCoreError) as exc:
+        logger.warning("Could not fetch Free Tier credit balance (%s)", exc)
+        return None
+
+    remaining = response.get("accountPlanRemainingCredits") or {}
+    if "amount" not in remaining:
+        return None
+
+    return {
+        "remaining": float(remaining["amount"]),
+        "unit": remaining.get("unit", "USD"),
+        "status": response.get("accountPlanStatus"),
+        "expiration": response.get("accountPlanExpirationDate"),
+    }
 
 
 def percent(value, limit):
@@ -163,7 +220,7 @@ def format_line(usage, warn_percent):
     )
 
 
-def build_report(usages, warn_percent, max_items):
+def build_report(usages, warn_percent, max_items, credit_balance=None, credit_warn_usd=50.0):
     """Build the Telegram message text (HTML) from the usage list."""
     today = datetime.now().strftime("%d %b %Y")
     title = f"📊 <b>AWS Free Tier Report</b>\n🗓️ {today}"
@@ -188,9 +245,39 @@ def build_report(usages, warn_percent, max_items):
         "",
         DIVIDER,
         "",
-        "🏆 <b>Highest Usage</b>",
-        "",
     ]
+
+    if credit_balance is not None:
+        remaining = credit_balance["remaining"]
+        if credit_balance["status"] != "ACTIVE" or remaining <= 0:
+            dot = "🔴"
+        elif remaining <= credit_warn_usd:
+            dot = "🟡"
+        else:
+            dot = "🟢"
+
+        expires = credit_balance.get("expiration")
+        expires_str = expires.strftime("%d %b %Y") if hasattr(expires, "strftime") else str(expires)
+
+        lines.extend(
+            [
+                "💳 <b>Free Tier Credit Balance</b>",
+                (
+                    f"   {dot} ${fmt_num(remaining)} {credit_balance['unit']} remaining"
+                    f" · expires {expires_str}"
+                ),
+                "",
+                DIVIDER,
+                "",
+            ]
+        )
+
+    lines.extend(
+        [
+            "🏆 <b>Highest Usage</b>",
+            "",
+        ]
+    )
     lines.append("\n\n".join(format_line(u, warn_percent) for u in top))
     lines.extend(["", DIVIDER, ""])
 

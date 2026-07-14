@@ -37,6 +37,20 @@ def test_build_report_includes_service_name():
     assert "Action needed" in message
 
 
+def test_build_report_includes_credit_balance_when_provided():
+    credit_balance = {
+        "remaining": 154.18,
+        "unit": "USD",
+        "status": "ACTIVE",
+        "expiration": "2026-12-30T13:55:00.820000+00:00",
+    }
+    message = handler.build_report(
+        USAGES, warn_percent=80, max_items=3, credit_balance=credit_balance, credit_warn_usd=50.0
+    )
+    assert "Free Tier Credit Balance" in message
+    assert "$154.18 USD remaining" in message
+
+
 def test_get_credentials_prefers_parameter_store(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN_PARAM", "/aws-automation/dev/telegram/bot-token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID_PARAM", "/aws-automation/dev/telegram/chat-id")
@@ -92,6 +106,7 @@ def test_handler_sends_daily_report(monkeypatch):
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
     monkeypatch.setenv("TELEGRAM_CHAT_ID", "chat")
     monkeypatch.setattr(handler, "get_free_tier_usages", lambda region: USAGES)
+    monkeypatch.setattr(handler, "get_credit_balance", lambda region: None)
     monkeypatch.setattr(
         handler, "send_telegram_message", lambda token, chat, text: sent.append(text)
     )

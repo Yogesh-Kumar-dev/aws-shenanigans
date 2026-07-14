@@ -40,6 +40,7 @@ provider:
     TELEGRAM_CHAT_ID: ${env:TELEGRAM_CHAT_ID, ''}
     FREE_TIER_WARN_PERCENT: ${env:FREE_TIER_WARN_PERCENT, '10'}
     FREE_TIER_REPORT_MAX_ITEMS: ${env:FREE_TIER_REPORT_MAX_ITEMS, '3'}
+    FREE_TIER_CREDIT_WARN_USD: ${env:FREE_TIER_CREDIT_WARN_USD, '50'}
     EC2_DOMAIN: ${env:EC2_DOMAIN, 'quickrecall-aws.duckdns.org'}
   iam:
     role:
@@ -54,6 +55,7 @@ provider:
         - Effect: Allow
           Action:
             - freetier:GetFreeTierUsage
+            - freetier:GetAccountPlanState
           Resource: "*"
         - Effect: Allow
           Action:
