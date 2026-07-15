@@ -91,6 +91,7 @@ def get_parameter(param_name, region, decrypt=False):
         logger.warning("Could not read parameter %s (%s)", param_name, exc)
         return None
 
+
 def get_free_tier_usages(region):
     """Call the AWS Free Tier API and return a list of usage dicts."""
     client = boto3.client("freetier", region_name=region)
@@ -127,9 +128,7 @@ def get_free_tier_usages(region):
         )
 
     ec2_like = [
-        u
-        for u in usages
-        if "ec2" in u["service"].lower() or "compute" in u["service"].lower()
+        u for u in usages if "ec2" in u["service"].lower() or "compute" in u["service"].lower()
     ]
     if ec2_like:
         logger.info(

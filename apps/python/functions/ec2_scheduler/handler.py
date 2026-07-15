@@ -3,7 +3,7 @@
 import logging
 import os
 import socket
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 
 import boto3
 
@@ -33,7 +33,7 @@ def handle(event, context):
         ec2.stop_instances(InstanceIds=[instance_id])
 
     verb = "started" if action == "start" else "stopped"
-    now_ist = datetime.now(timezone.utc).astimezone(IST).strftime("%Y-%m-%d %H:%M:%S IST")
+    now_ist = datetime.now(UTC).astimezone(IST).strftime("%Y-%m-%d %H:%M:%S IST")
     logger.info("EC2 instance %s %s successfully at %s", instance_id, verb, now_ist)
     return {"action": action, "instance_id": instance_id, "timestamp": now_ist}
 
@@ -46,9 +46,7 @@ def resolve_instance_id(ec2_client, domain):
     """
     ip = socket.gethostbyname(domain)
 
-    response = ec2_client.describe_instances(
-        Filters=[{"Name": "ip-address", "Values": [ip]}]
-    )
+    response = ec2_client.describe_instances(Filters=[{"Name": "ip-address", "Values": [ip]}])
     instances = [
         instance
         for reservation in response["Reservations"]
@@ -56,8 +54,6 @@ def resolve_instance_id(ec2_client, domain):
     ]
 
     if len(instances) != 1:
-        raise ValueError(
-            f"Expected exactly 1 instance for {domain} ({ip}), found {len(instances)}"
-        )
+        raise ValueError(f"Expected exactly 1 instance for {domain} ({ip}), found {len(instances)}")
 
     return instances[0]["InstanceId"]

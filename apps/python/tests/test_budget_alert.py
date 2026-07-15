@@ -60,7 +60,9 @@ def test_get_credentials_prefers_parameter_store(monkeypatch):
         "/aws-automation/dev/telegram/bot-token": "param-token",
         "/aws-automation/dev/telegram/chat-id": "param-chat",
     }
-    monkeypatch.setattr(handler, "get_parameter", lambda name, region, decrypt=False: params.get(name))
+    monkeypatch.setattr(
+        handler, "get_parameter", lambda name, region, decrypt=False: params.get(name)
+    )
 
     assert handler.get_telegram_credentials("us-east-1") == ("param-token", "param-chat")
 
