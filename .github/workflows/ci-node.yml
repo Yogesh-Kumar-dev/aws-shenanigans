@@ -18,6 +18,9 @@ defaults:
 jobs:
   test:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -27,6 +30,10 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
         working-directory: .
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-2
       # ponytail: no lint/test scripts exist in apps/node yet — `serverless package`
       # is a smoke check that the handlers build. Swap in real lint/test once added.
       - run: pnpm exec serverless package
