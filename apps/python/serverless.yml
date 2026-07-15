@@ -1,4 +1,6 @@
 service: aws-automation
+org: yogesh4c8
+app: aws-shenanigans
 frameworkVersion: "4"
 useDotenv: true
 

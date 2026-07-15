@@ -1,0 +1,59 @@
+name: ci-node
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/node/**"
+      - ".github/workflows/ci-node.yml"
+  pull_request:
+    paths:
+      - "apps/node/**"
+      - ".github/workflows/ci-node.yml"
+
+defaults:
+  run:
+    working-directory: apps/node
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      # ponytail: no lint/test scripts exist in apps/node yet — `serverless package`
+      # is a smoke check that the handlers build. Swap in real lint/test once added.
+      - run: pnpm exec serverless package
+        env:
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        working-directory: .
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ap-south-2
+      - run: pnpm --filter @aws-shenanigans/node run deploy
+        working-directory: .
+        env:
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
