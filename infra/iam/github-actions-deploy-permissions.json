@@ -47,22 +47,22 @@
       "Sid": "LambdaFunctions",
       "Effect": "Allow",
       "Action": [
+        "lambda:Get*",
+        "lambda:List*",
         "lambda:CreateFunction",
         "lambda:UpdateFunctionCode",
         "lambda:UpdateFunctionConfiguration",
         "lambda:DeleteFunction",
-        "lambda:GetFunction",
-        "lambda:GetFunctionConfiguration",
-        "lambda:ListVersionsByFunction",
         "lambda:PublishVersion",
         "lambda:DeleteFunctionConcurrency",
         "lambda:PutFunctionConcurrency",
         "lambda:AddPermission",
         "lambda:RemovePermission",
-        "lambda:GetPolicy",
         "lambda:TagResource",
         "lambda:UntagResource",
-        "lambda:ListTags"
+        "lambda:CreateAlias",
+        "lambda:UpdateAlias",
+        "lambda:DeleteAlias"
       ],
       "Resource": [
         "arn:aws:lambda:ap-south-2:<AWS_ACCOUNT_ID>:function:aws-automation-*",
@@ -73,8 +73,9 @@
       "Sid": "LambdaLayers",
       "Effect": "Allow",
       "Action": [
+        "lambda:Get*",
+        "lambda:List*",
         "lambda:PublishLayerVersion",
-        "lambda:GetLayerVersion",
         "lambda:DeleteLayerVersion"
       ],
       "Resource": [
